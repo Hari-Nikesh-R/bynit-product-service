@@ -29,6 +29,8 @@ public class ProductCreateRequest {
     @NotNull(message = "Quantity must not be null")
     @Positive(message = "Quantity must not be negative or zero")
     private Integer quantity;
+    private String description;
+    private String category;
     @NotNull(message = "email must not be null")
     private String merchantEmail;
 }

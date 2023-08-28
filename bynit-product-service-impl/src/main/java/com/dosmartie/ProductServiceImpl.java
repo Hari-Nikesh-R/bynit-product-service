@@ -9,15 +9,16 @@ import com.dosmartie.response.BaseResponse;
 import com.dosmartie.response.ProductResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,31 +27,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class ProductServiceImpl implements ProductService {
     private static final Map<String, AtomicInteger> counters = new ConcurrentHashMap<>();
-    @Autowired
-    private final ObjectMapper mapper;
-    @Autowired
-    private final ProductRepository productRepository;
-    @Autowired
-    private final ResponseMessage<String> responseMessage;
 
-    public ProductServiceImpl(ObjectMapper mapper, ProductRepository productRepository, ResponseMessage<String> responseMessage) {
+    //todo: Mapstruct
+
+    private final ObjectMapper mapper;
+    private final ProductRepository productRepository;
+    private final ResponseMessage<String> responseMessage;
+    private final ResponseMessage<List<ProductResponse>> productResponseResponseMessage;
+
+    @Autowired
+    public ProductServiceImpl(ObjectMapper mapper, ProductRepository productRepository, ResponseMessage<String> responseMessage, ResponseMessage<List<ProductResponse>> productResponseResponseMessage) {
         this.mapper = mapper;
         this.productRepository = productRepository;
         this.responseMessage = responseMessage;
+        this.productResponseResponseMessage = productResponseResponseMessage;
     }
 
     @Override
-    public ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest productRequest) throws IOException {
+    public synchronized ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest productRequest) throws IOException {
         try {
-
             Optional<Product> optionalProduct = getUniqueProduct(productRequest);
-            return optionalProduct.map(product -> {
-                        //todo: Add variant
-                        Optional<Product> productByVariant = getUniqueProductByVariant(productRequest);
-//                    updateProduct(productRequest)
-                    return ResponseEntity.ok(responseMessage.setSuccessResponse("Product updated", null));
-                    }
-            ).orElseGet(() -> createNewProduct(productRequest));
+            return optionalProduct
+                    .map(product -> updateProduct(productRequest, product))
+                    .orElseGet(() -> createNewProduct(productRequest));
         } catch (Exception exception) {
             log.error("thrown an exception: " + exception.getMessage());
             return ResponseEntity.ok(responseMessage.setFailureResponse("Failed to do operation", exception));
@@ -58,23 +57,96 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ResponseEntity<BaseResponse<ProductResponse>> getProduct(String productName) {
-        return null;
-    }
-
-    @Override
-    public ResponseEntity<BaseResponse<String>> deleteProduct(String productName) {
-        return null;
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getAllProductViaCategory(String category, int page, int size, String merchant) {
+        try {
+            List<Product> productList = Objects.isNull(merchant) ? getProductViaCategory(category, PageRequest.of(page, size)) : getProductViaCategoryAndMerchant(category, merchant, PageRequest.of(page, size));
+            return ResponseEntity.ok(productResponseResponseMessage.setSuccessResponse("Fetched category Result", loadProductToProductResponse(productList)));
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            return ResponseEntity.ok(productResponseResponseMessage.setFailureResponse("Unable to retrieve result", exception));
+        }
     }
 
     @Override
     public ResponseEntity<BaseResponse<String>> deleteAllProduct() {
-        return null;
+        try {
+            productRepository.deleteAll();
+            return ResponseEntity.ok(responseMessage.setSuccessResponse("All product Deleted successfully", null));
+        } catch (Exception exception) {
+            return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product", exception));
+        }
     }
 
     @Override
-    public BaseResponse<List<ProductResponse>> getAllProductsFromInventory() {
-        return null;
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProduct(String searchParam, int page, int size, String merchant, String authId) {
+        try {
+            List<Product> productList = Objects.nonNull(merchant) ? getProductViaMerchantSearchQuery(searchParam, merchant, PageRequest.of(page, size)) : getProductViaSearchQuery(searchParam, PageRequest.of(page, size));
+            return ResponseEntity.ok(productResponseResponseMessage.setSuccessResponse("Fetched Result", loadProductToProductResponse(productList)));
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            return ResponseEntity.ok(productResponseResponseMessage.setFailureResponse("Unable to retrieve result", exception));
+        }
+    }
+
+    @Override
+    public BaseResponse<List<ProductResponse>> getAllProductsFromInventory(int page, int size, String merchant, String authId) {
+        try {
+            return productResponseResponseMessage
+                    .setSuccessResponse("Fetched result", Objects.nonNull(merchant) ? loadProductToProductResponse(productRepository.findAllByMerchantEmail(merchant, PageRequest.of(page, size))) : loadProductToProductResponse(productRepository.findAll(PageRequest.of(page, size))));
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            return productResponseResponseMessage.setFailureResponse("Unable to fetch result", exception);
+        }
+    }
+
+    @Override
+    public ResponseEntity<BaseResponse<String>> deleteProduct(String defaultSku) {
+        try {
+            Optional<Product> optionalProduct = getProductByDefaultSku(defaultSku);
+            return optionalProduct.map(product -> {
+                productRepository.delete(product);
+                return ResponseEntity.ok(responseMessage.setSuccessResponse("Product deleted successfully", null));
+            }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product")));
+        } catch (Exception exception) {
+            return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product variant", exception));
+        }
+    }
+
+
+    private ResponseEntity<BaseResponse<String>> updateProduct(ProductCreateRequest productCreateRequest, Product product) {
+        try {
+            Optional<Product> optionalProduct = getUniqueProductByVariant(productCreateRequest);
+            return optionalProduct.map((variant) -> ResponseEntity.ok(responseMessage.setFailureResponse("Product variant already exist"))).orElseGet(() -> {
+                product.getVariants().add(constructVariant(productCreateRequest, product));
+                productRepository.save(product);
+                return ResponseEntity.ok(responseMessage.setSuccessResponse("Variant updated", null));
+            });
+
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            log.info(exception.fillInStackTrace().getLocalizedMessage());
+            return ResponseEntity.ok(responseMessage.setFailureResponse("Product Not updated", exception));
+        }
+    }
+
+    @Override
+    public ResponseEntity<BaseResponse<String>> deleteProductVariant(String itemSku) {
+        try {
+            Optional<Product> optionalProduct = getProductVariantItemSku(itemSku);
+            return optionalProduct.map(product -> product.getVariants().stream()
+                    .filter(variant -> variant.getSku().equalsIgnoreCase(itemSku)).findFirst()
+                    .map((productVariant) -> {
+                        product.getVariants().remove(productVariant);
+                        if (product.getVariants().size() == 0) {
+                            productRepository.delete(product);
+                        } else {
+                            productRepository.save(product);
+                        }
+                        return ResponseEntity.ok(responseMessage.setSuccessResponse("Removed variant successfully", null));
+                    }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No variant found")))).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No product with variant found")));
+        } catch (Exception exception) {
+            return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product variant", exception));
+        }
     }
 
     private ResponseEntity<BaseResponse<String>> createNewProduct(ProductCreateRequest productCreateRequest) {
@@ -87,22 +159,17 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
-//    private ResponseEntity<BaseResponse<String>> updateProduct(ProductCreateRequest productRequest) {
-//        try {
-//            Optional<Product> optionalProduct = getProductByName(productRequest.getName());
-//            return optionalProduct.map((product -> {
-//                product.getVariants().product.getProductQuantity() + productRequest.getProductQuantity());
-//                if (Objects.nonNull(productRequest.getProductPrice())) {
-//                    product.setProductPrice(productRequest.getProductPrice());
-//                }
-//                product.setProductName(productRequest.getProductName());
-//                productRepository.save(product);
-//                return ResponseEntity.ok(new BaseResponse<>("Product Updated", null, true, HttpStatus.OK.value()));
-//            })).orElseGet(() -> ResponseEntity.ok(new BaseResponse<>(null, "Product not updated", false, HttpStatus.NO_CONTENT.value())));
-//        } catch (Exception exception) {
-//            return ResponseEntity.ok(new BaseResponse<>(null, exception.getMessage(), false, HttpStatus.INTERNAL_SERVER_ERROR.value()));
-//        }
-//    }
+    private List<ProductResponse> loadProductToProductResponse(List<Product> productList) {
+        List<ProductResponse> productResponses = new ArrayList<>();
+        productList.forEach(product -> productResponses.add(mapper.convertValue(product, ProductResponse.class)));
+        return productResponses;
+    }
+
+    private List<ProductResponse> loadProductToProductResponse(Page<Product> productList) {
+        List<ProductResponse> productResponses = new ArrayList<>();
+        productList.forEach(product -> productResponses.add(mapper.convertValue(product, ProductResponse.class)));
+        return productResponses;
+    }
 
     private String defaultSkuGenerator(String name) {
         return DefaultSkuGenerator.generateDefaultSku(name);
@@ -113,98 +180,36 @@ public class ProductServiceImpl implements ProductService {
         product.setMerchantEmail(productCreateRequest.getMerchantEmail());
         product.setName(productCreateRequest.getName());
         product.setDefaultSku(defaultSkuGenerator(productCreateRequest.getName()));
-        product.setBrand(productCreateRequest.getBrand());
-
+        product.setBrand(productCreateRequest.getBrand().toUpperCase());
+        product.setCategory(productCreateRequest.getCategory().toUpperCase());
+        product.setDescription(productCreateRequest.getDescription());
         product.setVariants(setVariant(product, productCreateRequest));
         return product;
     }
 
     private List<Variant> setVariant(Product product, ProductCreateRequest productCreateRequest) {
         List<Variant> variants = new ArrayList<>();
+        variants.add(constructVariant(productCreateRequest, product));
+        return variants;
+    }
+
+    private Variant constructVariant(ProductCreateRequest productCreateRequest, Product product) {
         Variant variant = new Variant();
         variant.setQuantity(productCreateRequest.getQuantity());
+        variant.setPrice(productCreateRequest.getPrice());
         variant.setSku(skuIncrementor(product));
         variant.setColor(productCreateRequest.getColor());
         variant.setImages(productCreateRequest.getImages());
         variant.setSize(productCreateRequest.getSize());
-        variants.add(variant);
-        return variants;
+        return variant;
     }
+
 
     private String skuIncrementor(Product product) {
         product.setCounter(product.getCounter() + 1);
         return product.getDefaultSku() + "-" + product.getCounter();
     }
 
-    //
-//    @Override
-//    public ResponseEntity<BaseResponse<ProductResponse>> getProduct(String productName) {
-//        try {
-//            Optional<Product> optionalProduct = getProductByName(productName);
-//            return optionalProduct.map(product -> {
-//                ProductResponse productResponse = new ProductResponse();
-//                BeanUtils.copyProperties(optionalProduct.get(), productResponse);
-//                return ResponseEntity.ok(new BaseResponse<>(productResponse, null, true, HttpStatus.OK.value()));
-//            }).orElseGet(() -> ResponseEntity.ok(new BaseResponse<>(null, "Product Not found", true, HttpStatus.NO_CONTENT.value())));
-//        } catch (Exception exception) {
-//            return ResponseEntity.ok(new BaseResponse<>(null, exception.getMessage(), false, HttpStatus.INTERNAL_SERVER_ERROR.value()));
-//        }
-//    }
-//
-//    @Override
-//    public ResponseEntity<BaseResponse<Map<String, List<Report>>>> generateReport() {
-//        try {
-//            double totalValue = 0;
-//            Map<String, List<Report>> doubleListMap = new HashMap<>();
-//            List<Report> reports = new Vector<>();
-//            List<Product> productList = productRepository.findAll();
-//            for (Product product : productList) {
-//                totalValue += product.getProductPrice() * product.getProductQuantity();
-//                reports.add(new Report(product.getProductName(), product.getProductPrice(), product.getProductQuantity()));
-//            }
-//            doubleListMap.put("Total value of inventory: " + totalValue, reports);
-//            return ResponseEntity.ok(new BaseResponse<>(doubleListMap, null, true, HttpStatus.OK.value()));
-//        } catch (Exception exception) {
-//            return ResponseEntity.ok(new BaseResponse<>(new HashMap<>(), exception.getMessage(), false, HttpStatus.INTERNAL_SERVER_ERROR.value()));
-//        }
-//    }
-//
-//    @Override
-//    public ResponseEntity<BaseResponse<String>> deleteProduct(String productName) {
-//        try {
-//            Optional<Product> optionalProduct = getProductByName(productName);
-//            if (optionalProduct.isPresent()) {
-//                productRepository.delete(optionalProduct.get());
-//                return ResponseEntity.ok(new BaseResponse<>("Deleted successfully", null, true, HttpStatus.OK.value()));
-//            } else {
-//                return ResponseEntity.ok(new BaseResponse<>(null, "No Product found", false, HttpStatus.NO_CONTENT.value()));
-//            }
-//        } catch (Exception exception) {
-//            return ResponseEntity.ok(new BaseResponse<>(null, exception.getMessage(), false, HttpStatus.INTERNAL_SERVER_ERROR.value()));
-//        }
-//    }
-//
-//    @Override
-//    public ResponseEntity<BaseResponse<String>> deleteAllProduct() {
-//        try {
-//            productRepository.deleteAll();
-//            return ResponseEntity.ok(new BaseResponse<>("Deleted successfully", null, true, HttpStatus.OK.value()));
-//        } catch (Exception exception) {
-//            return ResponseEntity.ok(new BaseResponse<>(null, exception.getMessage(), false, HttpStatus.INTERNAL_SERVER_ERROR.value()));
-//        }
-//    }
-//
-//    @Override
-//    public BaseResponse<List<ProductResponse>> getAllProductsFromInventory() {
-//        try {
-//            List<ProductResponse> productResponses = mapper.convertValue(productRepository.findAll(), new TypeReference<>() {
-//            });
-//            return new BaseResponse<>(productResponses, null, true, HttpStatus.OK.value());
-//        } catch (Exception exception) {
-//            return new BaseResponse<>(null, exception.getMessage(), false, HttpStatus.INTERNAL_SERVER_ERROR.value());
-//        }
-//    }
-//
 //    @Override
 //    public synchronized ProductQuantityCheckResponse[] checkStock(List<PurchaseRequest> productRequest) {
 //        List<ProductQuantityCheckResponse> productQuantityCheckResponses = new ArrayList<>();
@@ -235,18 +240,42 @@ public class ProductServiceImpl implements ProductService {
 //            return new ProductQuantityCheckResponse(false, "No product found", null);
 //        }
 //    }
-//
-//
-//    private synchronized Optional<Product> getProductBySku(String itemSku) {
-//        return productRepository.findProductContainingDefaultSku(itemSku);
-//    }
-    private synchronized Optional<Product> getProductByName(String name) {
-        return productRepository.findByNameIgnoreCase(name);
+
+
+    // Database query sections;
+    private synchronized List<Product> getProductViaSearchQuery(String searchParam, Pageable pageable) {
+        return productRepository.findAllByBrandIgnoreCaseOrNameContainingIgnoreCase(searchParam, searchParam, pageable);
+    }
+
+    private synchronized List<Product> getProductViaMerchantSearchQuery(String searchParam, String merchant, Pageable pageable) {
+        return productRepository.findAllByBrandIgnoreCaseOrNameContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(searchParam, searchParam, merchant, pageable);
+    }
+
+    private synchronized List<Product> getProductViaCategory(String category, Pageable pageable) {
+        return productRepository.findAllByCategoryContainingIgnoreCase(category, pageable);
+    }
+
+    private synchronized List<Product> getProductViaCategoryAndMerchant(String category, String merchant, Pageable pageable) {
+        return productRepository.findAllByCategoryContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(category, merchant, pageable);
+    }
+
+    private synchronized Optional<Product> getProductVariantItemSku(String itemSku) {
+        return productRepository.findByVariantsSkuIgnoreCase(itemSku);
+    }
+
+    private synchronized Optional<Product> getProductByDefaultSku(String defaultSku) {
+        return productRepository.findByDefaultSku(defaultSku);
     }
 
     //todo: for updating variant
     private synchronized Optional<Product> getUniqueProductByVariant(ProductCreateRequest productCreateRequest) {
-        return productRepository.findByBrandIgnoreCaseAndNameIgnoreCaseAndMerchantEmailIgnoreCaseAndVariantsColorIgnoreCaseAndVariantsSizeIgnoreCase(productCreateRequest.getBrand(), productCreateRequest.getName(), productCreateRequest.getMerchantEmail(), productCreateRequest.getColor(), productCreateRequest.getSize());
+        if (Objects.nonNull(productCreateRequest.getSize()) && Objects.nonNull(productCreateRequest.getColor())) {
+            return productRepository.findByBrandIgnoreCaseAndNameIgnoreCaseAndMerchantEmailIgnoreCaseAndVariantsColorIgnoreCaseAndVariantsSizeIgnoreCase(productCreateRequest.getBrand(), productCreateRequest.getName(), productCreateRequest.getMerchantEmail(), productCreateRequest.getColor(), productCreateRequest.getSize());
+        } else if (Objects.nonNull(productCreateRequest.getSize())) {
+            return productRepository.findByBrandIgnoreCaseAndNameIgnoreCaseAndMerchantEmailIgnoreCaseAndVariantsSizeIgnoreCase(productCreateRequest.getBrand(), productCreateRequest.getName(), productCreateRequest.getMerchantEmail(), productCreateRequest.getSize());
+        } else {
+            return productRepository.findByBrandIgnoreCaseAndNameIgnoreCaseAndMerchantEmailIgnoreCaseAndVariantsColorIgnoreCase(productCreateRequest.getBrand(), productCreateRequest.getName(), productCreateRequest.getMerchantEmail(), productCreateRequest.getColor());
+        }
     }
 
     //todo: For Adding variant and updating product [default]

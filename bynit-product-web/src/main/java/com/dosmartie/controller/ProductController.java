@@ -3,7 +3,6 @@ package com.dosmartie.controller;
 
 import com.dosmartie.ProductService;
 import com.dosmartie.helper.Urls;
-
 import com.dosmartie.request.ProductCreateRequest;
 import com.dosmartie.response.BaseResponse;
 import com.dosmartie.response.ProductResponse;
@@ -14,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.List;
+
+import static com.dosmartie.helper.Constants.*;
 
 
 @RestController
@@ -33,14 +34,24 @@ public class ProductController {
         return productService.addOrUpdateProduct(product);
     }
 
+    @GetMapping(value = "/{category}")
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProductViaCategory(@PathVariable("category") String category,@RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant) {
+        return productService.getAllProductViaCategory(category, page, size, merchant);
+    }
+
     @GetMapping
-    public ResponseEntity<BaseResponse<ProductResponse>> getProduct(@RequestParam("productName") String productName) {
-        return productService.getProduct(productName);
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProduct(@RequestParam(SEARCH_PARAM) String searchParam, @RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant, @RequestHeader(AUTH_ID) String authId) {
+        return productService.getProduct(searchParam, page, size, merchant, authId);
+    }
+
+    @DeleteMapping(value = "/variant")
+    public ResponseEntity<BaseResponse<String>> deleteProductVariant(@RequestParam(VARIANT_SKU) String itemSku) {
+        return productService.deleteProductVariant(itemSku);
     }
 
     @DeleteMapping
-    public ResponseEntity<BaseResponse<String>> deleteProduct(@RequestParam("productName") String productName) {
-        return productService.deleteProduct(productName);
+    public ResponseEntity<BaseResponse<String>> deleteProduct(@RequestParam(DEFAULT_SKU) String itemSku) {
+        return productService.deleteProduct(itemSku);
     }
 
     @DeleteMapping(value = Urls.ALL_PRODUCT)
@@ -49,8 +60,8 @@ public class ProductController {
     }
 
     @GetMapping(value = Urls.ALL_PRODUCT)
-    public BaseResponse<List<ProductResponse>> getAllProducts() {
-        return productService.getAllProductsFromInventory();
+    public BaseResponse<List<ProductResponse>> getAllProducts(@RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant, @RequestHeader(AUTH_ID) String authId) {
+        return productService.getAllProductsFromInventory(page, size, merchant, authId);
     }
 
 //    @PostMapping(value = Urls.QUANTITY)

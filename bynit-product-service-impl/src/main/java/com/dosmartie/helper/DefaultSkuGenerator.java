@@ -1,5 +1,6 @@
 package com.dosmartie.helper;
 
+import lombok.NoArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Random;
