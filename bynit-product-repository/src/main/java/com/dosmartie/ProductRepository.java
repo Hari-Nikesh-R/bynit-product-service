@@ -13,9 +13,15 @@ public interface ProductRepository extends MongoRepository<Product, Integer> {
 
     // todo: Can be used as alternative for search for now
     List<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCase(String brand, String name, Pageable pageable);
+
+    Optional<Product> findByVariantsSku(String itemSku);
+
     List<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(String brand, String name, String merchant, Pageable pageable);
+
     List<Product> findAllByCategoryContainingIgnoreCase(String category, Pageable pageable);
+
     List<Product> findAllByCategoryContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(String category, String merchant, Pageable pageable);
+
     List<Product> findAllByMerchantEmail(String name, Pageable pageable);
 
     Optional<Product> findByVariantsSkuIgnoreCase(String itemSku);

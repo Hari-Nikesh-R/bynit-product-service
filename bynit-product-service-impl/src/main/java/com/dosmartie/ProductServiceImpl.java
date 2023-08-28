@@ -4,8 +4,11 @@ import com.dosmartie.document.Product;
 import com.dosmartie.document.mongohelper.Variant;
 import com.dosmartie.helper.DefaultSkuGenerator;
 import com.dosmartie.helper.ResponseMessage;
+import com.dosmartie.request.CartProductRequest;
 import com.dosmartie.request.ProductCreateRequest;
 import com.dosmartie.response.BaseResponse;
+import com.dosmartie.response.CartProductResponse;
+import com.dosmartie.response.ProductQuantityCheckResponse;
 import com.dosmartie.response.ProductResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +24,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 @Service
@@ -47,9 +51,7 @@ public class ProductServiceImpl implements ProductService {
     public synchronized ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest productRequest) throws IOException {
         try {
             Optional<Product> optionalProduct = getUniqueProduct(productRequest);
-            return optionalProduct
-                    .map(product -> updateProduct(productRequest, product))
-                    .orElseGet(() -> createNewProduct(productRequest));
+            return optionalProduct.map(product -> updateProduct(productRequest, product)).orElseGet(() -> createNewProduct(productRequest));
         } catch (Exception exception) {
             log.error("thrown an exception: " + exception.getMessage());
             return ResponseEntity.ok(responseMessage.setFailureResponse("Failed to do operation", exception));
@@ -91,8 +93,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public BaseResponse<List<ProductResponse>> getAllProductsFromInventory(int page, int size, String merchant, String authId) {
         try {
-            return productResponseResponseMessage
-                    .setSuccessResponse("Fetched result", Objects.nonNull(merchant) ? loadProductToProductResponse(productRepository.findAllByMerchantEmail(merchant, PageRequest.of(page, size))) : loadProductToProductResponse(productRepository.findAll(PageRequest.of(page, size))));
+            return productResponseResponseMessage.setSuccessResponse("Fetched result", Objects.nonNull(merchant) ? loadProductToProductResponse(productRepository.findAllByMerchantEmail(merchant, PageRequest.of(page, size))) : loadProductToProductResponse(productRepository.findAll(PageRequest.of(page, size))));
         } catch (Exception exception) {
             exception.printStackTrace();
             return productResponseResponseMessage.setFailureResponse("Unable to fetch result", exception);
@@ -133,17 +134,15 @@ public class ProductServiceImpl implements ProductService {
     public ResponseEntity<BaseResponse<String>> deleteProductVariant(String itemSku) {
         try {
             Optional<Product> optionalProduct = getProductVariantItemSku(itemSku);
-            return optionalProduct.map(product -> product.getVariants().stream()
-                    .filter(variant -> variant.getSku().equalsIgnoreCase(itemSku)).findFirst()
-                    .map((productVariant) -> {
-                        product.getVariants().remove(productVariant);
-                        if (product.getVariants().size() == 0) {
-                            productRepository.delete(product);
-                        } else {
-                            productRepository.save(product);
-                        }
-                        return ResponseEntity.ok(responseMessage.setSuccessResponse("Removed variant successfully", null));
-                    }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No variant found")))).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No product with variant found")));
+            return optionalProduct.map(product -> product.getVariants().stream().filter(variant -> variant.getSku().equalsIgnoreCase(itemSku)).findFirst().map((productVariant) -> {
+                product.getVariants().remove(productVariant);
+                if (product.getVariants().size() == 0) {
+                    productRepository.delete(product);
+                } else {
+                    productRepository.save(product);
+                }
+                return ResponseEntity.ok(responseMessage.setSuccessResponse("Removed variant successfully", null));
+            }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No variant found")))).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No product with variant found")));
         } catch (Exception exception) {
             return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product variant", exception));
         }
@@ -210,27 +209,55 @@ public class ProductServiceImpl implements ProductService {
         return product.getDefaultSku() + "-" + product.getCounter();
     }
 
-//    @Override
-//    public synchronized ProductQuantityCheckResponse[] checkStock(List<PurchaseRequest> productRequest) {
-//        List<ProductQuantityCheckResponse> productQuantityCheckResponses = new ArrayList<>();
-//        try {
-//            List<Product> productList = productRepository.findAll();
-//            productRequest.forEach(product -> {
-//                productQuantityCheckResponses.add(getProductByQuantity(productList, product));
-//            });
-//        } catch (Exception exception) {
-//            exception.printStackTrace();
-//            productQuantityCheckResponses.add(new ProductQuantityCheckResponse(false, exception.getMessage(), null));
-//        }
-//        return productQuantityCheckResponses.toArray(ProductQuantityCheckResponse[]::new);
-//    }
-//
-//    private ProductQuantityCheckResponse getProductByQuantity(List<Product> productList, PurchaseRequest purchaseRequest) {
+    @Override
+    public synchronized ProductQuantityCheckResponse[] checkStock(List<CartProductRequest> productRequest) {
+        List<ProductQuantityCheckResponse> productQuantityCheckResponses = new ArrayList<>();
+        try {
+            productRequest.forEach(product -> productRepository.findByVariantsSku(product.getSku()).ifPresent(dbProduct -> productQuantityCheckResponses.add(getProductQuantity(dbProduct, product))));
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            productQuantityCheckResponses.add(new ProductQuantityCheckResponse(false, exception.getMessage(), null));
+        }
+        return productQuantityCheckResponses.toArray(ProductQuantityCheckResponse[]::new);
+    }
+
+    private ProductQuantityCheckResponse getProductQuantity(Product product, CartProductRequest cartProductRequest) {
+        AtomicReference<ProductQuantityCheckResponse> productQuantityCheckResponse = new AtomicReference<>(new ProductQuantityCheckResponse());
+        product.getVariants().forEach(variant -> {
+            if (!(variant.getQuantity() >= cartProductRequest.getQuantity())) {
+                productQuantityCheckResponse.set(new ProductQuantityCheckResponse(false, product.getName() + " out of stock", null));
+            } else {
+                CartProductResponse productResponse = new CartProductResponse();
+                BeanUtils.copyProperties(product, productResponse);
+                if (Objects.nonNull(copyVariantToCartRequest(product.getVariants(), productResponse, cartProductRequest))) {
+                    productQuantityCheckResponse.set(new ProductQuantityCheckResponse(true, "Product available", productResponse));
+                } else {
+                    productQuantityCheckResponse.set(new ProductQuantityCheckResponse(true, "variant not available", productResponse));
+                }
+            }
+        });
+        return productQuantityCheckResponse.get();
+    }
+
+    private CartProductResponse copyVariantToCartRequest(List<Variant> variant, CartProductResponse productResponse, CartProductRequest cartProductRequest) {
+        Variant prodVariant = variant.stream().filter(productVariant -> productVariant.getSku().equalsIgnoreCase(cartProductRequest.getSku())).findFirst().orElseGet(() -> null);
+        if (Objects.nonNull(prodVariant)) {
+            productResponse.setSize(prodVariant.getSize());
+            productResponse.setPrice(prodVariant.getPrice());
+            productResponse.setSku(prodVariant.getSku());
+            productResponse.setColor(prodVariant.getColor());
+            return productResponse;
+        } else {
+            return null;
+        }
+    }
+
+//    private ProductQuantityCheckResponse getProductByQuantity(List<Product> productList, CartProductRequest purchaseRequest) {
 //        Optional<Product> product = productList.stream().filter(prod -> prod.getProductName(
-//        ).equalsIgnoreCase(purchaseRequest.getProductName())).findFirst();
+//        ).equalsIgnoreCase(purchaseRequest.getSku())).findFirst();
 //        if (product.isPresent()) {
 //            if (!(product.get().getProductQuantity() >= purchaseRequest.getQuantity())) {
-//                return new ProductQuantityCheckResponse(false, product.get().getProductName() + " out of stock", null);
+//                return new ProductQuantityCheckResponse(false, product.get().getName() + " out of stock", null);
 //            } else {
 //                ProductResponse productResponse = new ProductResponse();
 //                BeanUtils.copyProperties(product.get(), productResponse);

@@ -3,8 +3,10 @@ package com.dosmartie.controller;
 
 import com.dosmartie.ProductService;
 import com.dosmartie.helper.Urls;
+import com.dosmartie.request.CartProductRequest;
 import com.dosmartie.request.ProductCreateRequest;
 import com.dosmartie.response.BaseResponse;
+import com.dosmartie.response.ProductQuantityCheckResponse;
 import com.dosmartie.response.ProductResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +37,7 @@ public class ProductController {
     }
 
     @GetMapping(value = "/{category}")
-    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProductViaCategory(@PathVariable("category") String category,@RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant) {
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProductViaCategory(@PathVariable("category") String category, @RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant) {
         return productService.getAllProductViaCategory(category, page, size, merchant);
     }
 
@@ -64,9 +66,9 @@ public class ProductController {
         return productService.getAllProductsFromInventory(page, size, merchant, authId);
     }
 
-//    @PostMapping(value = Urls.QUANTITY)
-//    public ProductQuantityCheckResponse[] quantityCheck(@RequestBody List<PurchaseRequest> productRequest) {
-//        return productService.checkStock(productRequest);
-//    }
+    @PostMapping(value = Urls.QUANTITY)
+    public ProductQuantityCheckResponse[] quantityCheck(@RequestBody List<CartProductRequest> productRequest) {
+        return productService.checkStock(productRequest);
+    }
 
 }
