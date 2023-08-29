@@ -10,7 +10,8 @@ import com.dosmartie.response.ProductQuantityCheckResponse;
 import com.dosmartie.response.ProductResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import org.springframework
+        .http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -32,13 +33,13 @@ public class ProductController {
 //    }
 
     @PostMapping
-    public ResponseEntity<BaseResponse<String>> addProduct(@RequestBody @Valid ProductCreateRequest product) throws IOException {
-        return productService.addOrUpdateProduct(product);
+    public ResponseEntity<BaseResponse<String>> addProduct(@RequestBody @Valid ProductCreateRequest product, @RequestHeader(AUTH_ID) String authId) throws IOException {
+        return productService.addOrUpdateProduct(product, authId);
     }
 
     @GetMapping(value = "/{category}")
-    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProductViaCategory(@PathVariable("category") String category, @RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant) {
-        return productService.getAllProductViaCategory(category, page, size, merchant);
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getProductViaCategory(@PathVariable("category") String category, @RequestParam(PAGE) int page, @RequestParam(SIZE) int size, @RequestParam(value = MERCHANT, required = false) String merchant, @RequestHeader(AUTH_ID) String authId) {
+        return productService.getAllProductViaCategory(category, page, size, merchant, authId);
     }
 
     @GetMapping
@@ -47,18 +48,18 @@ public class ProductController {
     }
 
     @DeleteMapping(value = "/variant")
-    public ResponseEntity<BaseResponse<String>> deleteProductVariant(@RequestParam(VARIANT_SKU) String itemSku) {
-        return productService.deleteProductVariant(itemSku);
+    public ResponseEntity<BaseResponse<String>> deleteProductVariant(@RequestParam(VARIANT_SKU) String itemSku, @RequestHeader(AUTH_ID) String authId, @RequestHeader(MERCHANT) String email) {
+        return productService.deleteProductVariant(itemSku, authId, email);
     }
 
     @DeleteMapping
-    public ResponseEntity<BaseResponse<String>> deleteProduct(@RequestParam(DEFAULT_SKU) String itemSku) {
-        return productService.deleteProduct(itemSku);
+    public ResponseEntity<BaseResponse<String>> deleteProduct(@RequestParam(DEFAULT_SKU) String itemSku, @RequestHeader(AUTH_ID) String authId, @RequestHeader(MERCHANT) String email) {
+        return productService.deleteProduct(itemSku, authId, email);
     }
 
     @DeleteMapping(value = Urls.ALL_PRODUCT)
-    public ResponseEntity<BaseResponse<String>> deleteAllProduct() {
-        return productService.deleteAllProduct();
+    public ResponseEntity<BaseResponse<String>> deleteAllProduct(@RequestHeader(AUTH_ID) String authId, @RequestHeader(MERCHANT) String email) {
+        return productService.deleteAllProduct(authId, email);
     }
 
     @GetMapping(value = Urls.ALL_PRODUCT)

@@ -1,6 +1,7 @@
 package com.dosmartie;
 
 import com.dosmartie.document.Product;
+import com.dosmartie.document.mongohelper.Variant;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,7 @@ public interface ProductRepository extends MongoRepository<Product, Integer> {
     List<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCase(String brand, String name, Pageable pageable);
 
     Optional<Product> findByVariantsSku(String itemSku);
+    Optional<Variant> findVariantByVariantsSku(String itemSku);
 
     List<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(String brand, String name, String merchant, Pageable pageable);
 

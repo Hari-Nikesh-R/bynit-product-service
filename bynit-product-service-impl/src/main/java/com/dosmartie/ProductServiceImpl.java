@@ -3,6 +3,7 @@ package com.dosmartie;
 import com.dosmartie.document.Product;
 import com.dosmartie.document.mongohelper.Variant;
 import com.dosmartie.helper.DefaultSkuGenerator;
+import com.dosmartie.helper.PropertiesCollector;
 import com.dosmartie.helper.ResponseMessage;
 import com.dosmartie.request.CartProductRequest;
 import com.dosmartie.request.ProductCreateRequest;
@@ -38,20 +39,26 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ResponseMessage<String> responseMessage;
     private final ResponseMessage<List<ProductResponse>> productResponseResponseMessage;
+    private final PropertiesCollector propertiesCollector;
 
     @Autowired
-    public ProductServiceImpl(ObjectMapper mapper, ProductRepository productRepository, ResponseMessage<String> responseMessage, ResponseMessage<List<ProductResponse>> productResponseResponseMessage) {
+    public ProductServiceImpl(ObjectMapper mapper, ProductRepository productRepository, ResponseMessage<String> responseMessage, ResponseMessage<List<ProductResponse>> productResponseResponseMessage, PropertiesCollector propertiesCollector) {
         this.mapper = mapper;
         this.productRepository = productRepository;
         this.responseMessage = responseMessage;
         this.productResponseResponseMessage = productResponseResponseMessage;
+        this.propertiesCollector = propertiesCollector;
     }
 
     @Override
-    public synchronized ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest productRequest) throws IOException {
+    public ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest productRequest, String authId) throws IOException {
         try {
-            Optional<Product> optionalProduct = getUniqueProduct(productRequest);
-            return optionalProduct.map(product -> updateProduct(productRequest, product)).orElseGet(() -> createNewProduct(productRequest));
+            if (validateRequest(authId)) {
+                Optional<Product> optionalProduct = getUniqueProduct(productRequest);
+                return optionalProduct.map(product -> updateProduct(productRequest, product)).orElseGet(() -> createNewProduct(productRequest));
+            } else {
+                return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Access denied"));
+            }
         } catch (Exception exception) {
             log.error("thrown an exception: " + exception.getMessage());
             return ResponseEntity.ok(responseMessage.setFailureResponse("Failed to do operation", exception));
@@ -59,21 +66,31 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ResponseEntity<BaseResponse<List<ProductResponse>>> getAllProductViaCategory(String category, int page, int size, String merchant) {
+    public ResponseEntity<BaseResponse<List<ProductResponse>>> getAllProductViaCategory(String category, int page, int size, String merchant, String authId) {
         try {
-            List<Product> productList = Objects.isNull(merchant) ? getProductViaCategory(category, PageRequest.of(page, size)) : getProductViaCategoryAndMerchant(category, merchant, PageRequest.of(page, size));
-            return ResponseEntity.ok(productResponseResponseMessage.setSuccessResponse("Fetched category Result", loadProductToProductResponse(productList)));
-        } catch (Exception exception) {
+            if (validateRequest(authId)) {
+                List<Product> productList = Objects.isNull(merchant) ? getProductViaCategory(category, PageRequest.of(page, size)) : getProductViaCategoryAndMerchant(category, merchant, PageRequest.of(page, size));
+                return ResponseEntity.ok(productResponseResponseMessage.setSuccessResponse("Fetched category Result", loadProductToProductResponse(productList)));
+            }
+            else {
+                return ResponseEntity.ok(productResponseResponseMessage.setUnauthorizedResponse("Access denied"));
+            }
+            } catch (Exception exception) {
             exception.printStackTrace();
             return ResponseEntity.ok(productResponseResponseMessage.setFailureResponse("Unable to retrieve result", exception));
         }
     }
 
     @Override
-    public ResponseEntity<BaseResponse<String>> deleteAllProduct() {
+    public ResponseEntity<BaseResponse<String>> deleteAllProduct(String authId, String email) {
         try {
-            productRepository.deleteAll();
-            return ResponseEntity.ok(responseMessage.setSuccessResponse("All product Deleted successfully", null));
+            if (validateRequest(authId)) {
+                productRepository.deleteAll();
+                return ResponseEntity.ok(responseMessage.setSuccessResponse("All product Deleted successfully", null));
+            }
+            else{
+                return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Access denied"));
+            }
         } catch (Exception exception) {
             return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product", exception));
         }
@@ -82,8 +99,13 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public ResponseEntity<BaseResponse<List<ProductResponse>>> getProduct(String searchParam, int page, int size, String merchant, String authId) {
         try {
-            List<Product> productList = Objects.nonNull(merchant) ? getProductViaMerchantSearchQuery(searchParam, merchant, PageRequest.of(page, size)) : getProductViaSearchQuery(searchParam, PageRequest.of(page, size));
-            return ResponseEntity.ok(productResponseResponseMessage.setSuccessResponse("Fetched Result", loadProductToProductResponse(productList)));
+            if (validateRequest(authId)) {
+                List<Product> productList = Objects.nonNull(merchant) ? getProductViaMerchantSearchQuery(searchParam, merchant, PageRequest.of(page, size)) : getProductViaSearchQuery(searchParam, PageRequest.of(page, size));
+                return ResponseEntity.ok(productResponseResponseMessage.setSuccessResponse("Fetched Result", loadProductToProductResponse(productList)));
+            }
+            else{
+                return ResponseEntity.ok(productResponseResponseMessage.setUnauthorizedResponse("Access denied"));
+            }
         } catch (Exception exception) {
             exception.printStackTrace();
             return ResponseEntity.ok(productResponseResponseMessage.setFailureResponse("Unable to retrieve result", exception));
@@ -93,7 +115,12 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public BaseResponse<List<ProductResponse>> getAllProductsFromInventory(int page, int size, String merchant, String authId) {
         try {
-            return productResponseResponseMessage.setSuccessResponse("Fetched result", Objects.nonNull(merchant) ? loadProductToProductResponse(productRepository.findAllByMerchantEmail(merchant, PageRequest.of(page, size))) : loadProductToProductResponse(productRepository.findAll(PageRequest.of(page, size))));
+            if(validateRequest(authId)) {
+                return productResponseResponseMessage.setSuccessResponse("Fetched result", Objects.nonNull(merchant) ? loadProductToProductResponse(productRepository.findAllByMerchantEmail(merchant, PageRequest.of(page, size))) : loadProductToProductResponse(productRepository.findAll(PageRequest.of(page, size))));
+            }
+            else {
+                return productResponseResponseMessage.setUnauthorizedResponse("Access denied");
+            }
         } catch (Exception exception) {
             exception.printStackTrace();
             return productResponseResponseMessage.setFailureResponse("Unable to fetch result", exception);
@@ -101,18 +128,55 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ResponseEntity<BaseResponse<String>> deleteProduct(String defaultSku) {
+    public ResponseEntity<BaseResponse<String>> deleteProduct(String defaultSku, String authId, String email) {
         try {
-            Optional<Product> optionalProduct = getProductByDefaultSku(defaultSku);
-            return optionalProduct.map(product -> {
-                productRepository.delete(product);
-                return ResponseEntity.ok(responseMessage.setSuccessResponse("Product deleted successfully", null));
-            }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product")));
+            if(validateRequest(authId)) {
+                Optional<Product> optionalProduct = getProductByDefaultSku(defaultSku);
+                return optionalProduct.map(product -> {
+                    if (product.getMerchantEmail().equalsIgnoreCase(email)) {
+                        productRepository.delete(product);
+                        return ResponseEntity.ok(responseMessage.setSuccessResponse("Product deleted successfully", null));
+                    } else {
+                        return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Don't have access to delete product"));
+                    }
+                }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product")));
+            }
+            else {
+                return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Access denied"));
+            }
         } catch (Exception exception) {
             return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product variant", exception));
         }
     }
 
+
+    @Override
+    public ResponseEntity<BaseResponse<String>> deleteProductVariant(String itemSku, String authId, String email) {
+        try {
+            if (validateRequest(authId)) {
+                Optional<Product> optionalProduct = getProductVariantItemSku(itemSku);
+                return optionalProduct.map(product -> {
+                    if (product.getMerchantEmail().equalsIgnoreCase(email)) {
+                        product.getVariants().stream().filter(variant -> variant.getSku().equalsIgnoreCase(itemSku)).findFirst().map((productVariant) -> {
+                            product.getVariants().remove(productVariant);
+                            if (product.getVariants().size() == 0) {
+                                productRepository.delete(product);
+                            } else {
+                                productRepository.save(product);
+                            }
+                            return ResponseEntity.ok(responseMessage.setSuccessResponse("Removed variant successfully", null));
+                        }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No variant found")));
+                    }
+                    return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Don't have access to remove variant"));
+                }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No product with variant found")));
+            }
+            else {
+                return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Access denied"));
+            }
+        } catch (Exception exception) {
+            return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product variant", exception));
+        }
+    }
 
     private ResponseEntity<BaseResponse<String>> updateProduct(ProductCreateRequest productCreateRequest, Product product) {
         try {
@@ -129,25 +193,6 @@ public class ProductServiceImpl implements ProductService {
             return ResponseEntity.ok(responseMessage.setFailureResponse("Product Not updated", exception));
         }
     }
-
-    @Override
-    public ResponseEntity<BaseResponse<String>> deleteProductVariant(String itemSku) {
-        try {
-            Optional<Product> optionalProduct = getProductVariantItemSku(itemSku);
-            return optionalProduct.map(product -> product.getVariants().stream().filter(variant -> variant.getSku().equalsIgnoreCase(itemSku)).findFirst().map((productVariant) -> {
-                product.getVariants().remove(productVariant);
-                if (product.getVariants().size() == 0) {
-                    productRepository.delete(product);
-                } else {
-                    productRepository.save(product);
-                }
-                return ResponseEntity.ok(responseMessage.setSuccessResponse("Removed variant successfully", null));
-            }).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No variant found")))).orElseGet(() -> ResponseEntity.ok(responseMessage.setFailureResponse("No product with variant found")));
-        } catch (Exception exception) {
-            return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to delete product variant", exception));
-        }
-    }
-
     private ResponseEntity<BaseResponse<String>> createNewProduct(ProductCreateRequest productCreateRequest) {
         try {
             productRepository.save(constructProduct(productCreateRequest));
@@ -252,22 +297,9 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
-//    private ProductQuantityCheckResponse getProductByQuantity(List<Product> productList, CartProductRequest purchaseRequest) {
-//        Optional<Product> product = productList.stream().filter(prod -> prod.getProductName(
-//        ).equalsIgnoreCase(purchaseRequest.getSku())).findFirst();
-//        if (product.isPresent()) {
-//            if (!(product.get().getProductQuantity() >= purchaseRequest.getQuantity())) {
-//                return new ProductQuantityCheckResponse(false, product.get().getName() + " out of stock", null);
-//            } else {
-//                ProductResponse productResponse = new ProductResponse();
-//                BeanUtils.copyProperties(product.get(), productResponse);
-//                return new ProductQuantityCheckResponse(true, "Product available", productResponse);
-//            }
-//        } else {
-//            return new ProductQuantityCheckResponse(false, "No product found", null);
-//        }
-//    }
-
+    private synchronized boolean validateRequest(String auth) {
+        return propertiesCollector.getAuthId().equals(auth);
+    }
 
     // Database query sections;
     private synchronized List<Product> getProductViaSearchQuery(String searchParam, Pageable pageable) {
