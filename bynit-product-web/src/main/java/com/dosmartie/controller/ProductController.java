@@ -71,5 +71,9 @@ public class ProductController {
     public ProductQuantityCheckResponse[] quantityCheck(@RequestBody List<CartProductRequest> productRequest) {
         return productService.checkStock(productRequest);
     }
+    @PostMapping(value = Urls.STOCK)
+    public ResponseEntity<BaseResponse<String>> updateStock(@RequestBody CartProductRequest cartProductRequest, @RequestHeader(AUTH_ID) String authId) {
+        return productService.updateStock(cartProductRequest, authId);
+    }
 
 }

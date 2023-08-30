@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 public interface ProductService {
 
@@ -30,4 +31,5 @@ public interface ProductService {
     BaseResponse<List<ProductResponse>> getAllProductsFromInventory(int page, int size, String isMerchant, String authId);
 
     ProductQuantityCheckResponse[] checkStock(List<CartProductRequest> productRequest);
+    ResponseEntity<BaseResponse<String>> updateStock(CartProductRequest cartProductRequest, String authId);
 }

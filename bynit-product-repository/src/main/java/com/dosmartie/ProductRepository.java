@@ -2,6 +2,7 @@ package com.dosmartie;
 
 import com.dosmartie.document.Product;
 import com.dosmartie.document.mongohelper.Variant;
+import org.apache.zookeeper.Op;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
@@ -36,6 +37,10 @@ public interface ProductRepository extends MongoRepository<Product, Integer> {
             String merchantEmail,
             String color,
             String size);
+
+    Optional<Variant> findVariantByBrandIgnoreCaseAndNameIgnoreCaseAndVariantsColorAndVariantsSize(String brand, String name, String color, String size);
+    Optional<Variant> findVariantByBrandIgnoreCaseAndNameIgnoreCaseAndVariantsColor(String brand, String name, String color);
+    Optional<Variant> findVariantByBrandIgnoreCaseAndNameIgnoreCaseAndVariantsSize(String brand, String name, String size);
 
     Optional<Product> findByBrandIgnoreCaseAndNameIgnoreCaseAndMerchantEmailIgnoreCaseAndVariantsSizeIgnoreCase(
             String brand,

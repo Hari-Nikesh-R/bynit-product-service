@@ -12,6 +12,6 @@ public class Variant {
     private String color;
     private String size;
     private Double price;
-    private Integer quantity;
+    private int quantity;
     private List<String> images;
 }

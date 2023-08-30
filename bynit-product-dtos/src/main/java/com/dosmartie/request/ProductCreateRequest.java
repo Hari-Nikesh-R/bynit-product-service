@@ -22,6 +22,7 @@ public class ProductCreateRequest {
     private String name;
     private String color;
     private String size;
+    private String sku;
     @NotNull(message = "Price must not be null")
     @Positive(message = "Price cannot be negative")
     private Double price;
