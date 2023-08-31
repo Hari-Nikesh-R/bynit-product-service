@@ -18,4 +18,6 @@ public class ProductResponse {
     private String merchantEmail;
     private String description;
     private String category;
+    private double overAllRating;
+
 }

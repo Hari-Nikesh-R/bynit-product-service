@@ -3,6 +3,7 @@ package com.dosmartie.controller;
 import com.dosmartie.PurchaseService;
 import com.dosmartie.helper.Urls;
 import com.dosmartie.request.CartProductRequest;
+import com.dosmartie.request.OrderRatingRequest;
 import com.dosmartie.request.RateRequest;
 import com.dosmartie.response.BaseResponse;
 import jakarta.validation.Valid;
@@ -27,8 +28,13 @@ public class PurchaseController {
         return purchaseService.deductStock(productRequest);
     }
 
-    @PutMapping(value = Urls.PRODUCT + Urls.RATE)
-    public ResponseEntity<BaseResponse<?>> rateProduct(@RequestBody @Valid RateRequest rateRequest, @RequestHeader(AUTH_ID) String authId) {
-        return purchaseService.rateProduct(rateRequest);
+    @PutMapping(value = Urls.RATE)
+    public ResponseEntity<BaseResponse<?>> rateProduct(@RequestBody @Valid OrderRatingRequest orderRatingRequest, @RequestHeader(AUTH_ID) String authId) {
+        return purchaseService.rateProduct(orderRatingRequest, authId);
+    }
+
+    @GetMapping(value = Urls.RATE)
+    public ResponseEntity<BaseResponse<?>> fetchUnratedProductsFromAnOrder(@RequestHeader(AUTH_ID) String authId, @RequestParam("orderId") String orderId) {
+        return purchaseService.getUnratedProduct(orderId, authId);
     }
 }

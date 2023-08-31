@@ -3,6 +3,7 @@ package com.dosmartie;
 import com.dosmartie.document.Product;
 import com.dosmartie.document.mongohelper.Variant;
 import org.apache.zookeeper.Op;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
@@ -14,12 +15,12 @@ import java.util.Optional;
 public interface ProductRepository extends MongoRepository<Product, Integer> {
 
     // todo: Can be used as alternative for search for now
-    List<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCase(String brand, String name, Pageable pageable);
+    Page<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCase(String brand, String name, Pageable pageable);
 
     Optional<Product> findByVariantsSku(String itemSku);
     Optional<Variant> findVariantByVariantsSku(String itemSku);
 
-    List<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(String brand, String name, String merchant, Pageable pageable);
+    Page<Product> findAllByBrandIgnoreCaseOrNameContainingIgnoreCaseAndMerchantEmailContainingIgnoreCase(String brand, String name, String merchant, Pageable pageable);
 
     List<Product> findAllByCategoryContainingIgnoreCase(String category, Pageable pageable);
 

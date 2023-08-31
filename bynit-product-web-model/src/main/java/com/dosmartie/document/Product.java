@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.solr.core.mapping.SolrDocument;
+import org.springframework.data.solr.core.mapping.Indexed;
 
 import java.util.List;
 
@@ -24,8 +24,9 @@ public class Product extends MongoBaseAuditing {
     private List<Variant> variants;
     private String brand;
     private String description;
+    private double overAllRating;
+    @Indexed
     private String category;
-    private double rating;
     @CreatedBy
     private String merchantEmail;
     private int counter;
