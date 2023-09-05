@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-import static com.dosmartie.helper.Constants.AUTH_ID;
+
 
 @RestController
 @RequestMapping(value = Urls.PURCHASE)
@@ -29,12 +29,12 @@ public class PurchaseController {
     }
 
     @PutMapping(value = Urls.RATE)
-    public ResponseEntity<BaseResponse<?>> rateProduct(@RequestBody @Valid OrderRatingRequest orderRatingRequest, @RequestHeader(AUTH_ID) String authId) {
-        return purchaseService.rateProduct(orderRatingRequest, authId);
+    public ResponseEntity<BaseResponse<?>> rateProduct(@RequestBody @Valid OrderRatingRequest orderRatingRequest, @RequestHeader("email") String email) {
+        return purchaseService.rateProduct(orderRatingRequest, email);
     }
 
     @GetMapping(value = Urls.RATE)
-    public ResponseEntity<BaseResponse<?>> fetchUnratedProductsFromAnOrder(@RequestHeader(AUTH_ID) String authId, @RequestParam("orderId") String orderId) {
-        return purchaseService.getUnratedProduct(orderId, authId);
+    public ResponseEntity<BaseResponse<?>> fetchUnratedProductsFromAnOrder(@RequestParam("orderId") String orderId, @RequestHeader("email") String email) {
+        return purchaseService.getUnratedProduct(orderId, email);
     }
 }

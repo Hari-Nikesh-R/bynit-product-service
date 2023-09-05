@@ -8,7 +8,6 @@ import com.dosmartie.request.OrderRatingRequest;
 import com.dosmartie.request.RateRequest;
 import com.dosmartie.response.BaseResponse;
 import com.dosmartie.response.CartProductResponse;
-import com.dosmartie.utils.EncryptionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -25,8 +24,6 @@ public class PurchaseServiceImpl implements PurchaseService {
     private final ResponseMessage<Object> responseMessage;
     private final ProductDao productDao;
     private final OrderFeign orderFeign;
-    @Autowired
-    private EncryptionUtils encryptionUtils;
 
     @Autowired
     public PurchaseServiceImpl(ProductService productService, ResponseMessage<Object> responseMessage, ProductDao productDao, OrderFeign orderFeign) {
@@ -69,10 +66,9 @@ public class PurchaseServiceImpl implements PurchaseService {
     }
 
     @Override
-    public ResponseEntity<BaseResponse<?>> rateProduct(OrderRatingRequest orderRatingRequest, String authId) {
+    public ResponseEntity<BaseResponse<?>> rateProduct(OrderRatingRequest orderRatingRequest, String email) {
         try {
-            if (encryptionUtils.decryptAuthIdAndValidateRequest(authId)) {
-                Map<String, CartProductResponse> cartProductResponses = getUnratedProduct(orderRatingRequest.getOrderId(), orderRatingRequest.getRateRequest());
+                Map<String, CartProductResponse> cartProductResponses = getUnratedProduct(orderRatingRequest.getOrderId(), orderRatingRequest.getRateRequest(), email);
                 if (validateRatedVsUnratedProduct(orderRatingRequest.getRateRequest(), cartProductResponses)) {
                     orderRatingRequest.getRateRequest().forEach(rateRequest -> {
                         if (Objects.nonNull(cartProductResponses.get(rateRequest.getItemSku()))) {
@@ -83,21 +79,15 @@ public class PurchaseServiceImpl implements PurchaseService {
                 }
                 return ResponseEntity.ok(responseMessage.setFailureResponse("All Products already Rated"));
 
-            } else {
-                return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Access denied"));
-            }
         } catch (Exception exception) {
             return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to rate product", exception));
         }
     }
 
     @Override
-    public ResponseEntity<BaseResponse<?>> getUnratedProduct(String orderId, String authId) {
+    public ResponseEntity<BaseResponse<?>> getUnratedProduct(String orderId, String email) {
         try {
-            if (encryptionUtils.decryptAuthIdAndValidateRequest(authId)) {
-                return ResponseEntity.ok(responseMessage.setSuccessResponse("Fetched result", getUnratedProduct(orderId, new ArrayList<>())));
-            }
-            return ResponseEntity.ok(responseMessage.setUnauthorizedResponse("Access denied"));
+                return ResponseEntity.ok(responseMessage.setSuccessResponse("Fetched result", getUnratedProduct(orderId, new ArrayList<>(), email)));
         } catch (Exception exception) {
             return ResponseEntity.ok(responseMessage.setFailureResponse("Unable to fetch result", exception));
         }
@@ -151,7 +141,7 @@ public class PurchaseServiceImpl implements PurchaseService {
         return (oldRating + newRating) / orderPlaced;
     }
 
-    private Map<String, CartProductResponse> getUnratedProduct(String orderId, List<RateRequest> requests) {
-        return orderFeign.getUnratedProducts(orderId, requests);
+    private Map<String, CartProductResponse> getUnratedProduct(String orderId, List<RateRequest> requests, String email) {
+        return orderFeign.getUnratedProducts(orderId, requests, email);
     }
 }

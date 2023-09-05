@@ -32,6 +32,5 @@ public class ProductCreateRequest {
     private Integer quantity;
     private String description;
     private String category;
-    @NotNull(message = "email must not be null")
     private String merchantEmail;
 }

@@ -14,22 +14,22 @@ import java.util.Objects;
 
 public interface ProductService {
 
-    ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest product, String authId) throws IOException;
+    ResponseEntity<BaseResponse<String>> addOrUpdateProduct(ProductCreateRequest product, String email) throws IOException;
 
-    ResponseEntity<BaseResponse<List<ProductResponse>>> getAllProductViaCategory(String category, int page, int size, String merchant, String authId);
+    ResponseEntity<BaseResponse<List<ProductResponse>>> getAllProductViaCategory(String category, int page, int size, String merchant);
 
-    ResponseEntity<BaseResponse<List<ProductResponse>>> getProduct(String searchParam, int page, int size, String merchant, String authId);
+    ResponseEntity<BaseResponse<List<ProductResponse>>> getProduct(String searchParam, int page, int size, String merchant);
 
 //    ResponseEntity<BaseResponse<Map<String, List<Report>>>> generateReport();
 
-    ResponseEntity<BaseResponse<String>> deleteProductVariant(String itemSku, String authId, String email);
+    ResponseEntity<BaseResponse<String>> deleteProductVariant(String itemSku, String email);
 
-    ResponseEntity<BaseResponse<String>> deleteProduct(String itemSku, String authId, String email);
+    ResponseEntity<BaseResponse<String>> deleteProduct(String itemSku, String email);
 
-    ResponseEntity<BaseResponse<String>> deleteAllProduct(String authId, String email);
+    ResponseEntity<BaseResponse<String>> deleteAllProduct(String email);
 
-    BaseResponse<List<ProductResponse>> getAllProductsFromInventory(int page, int size, String isMerchant, String authId);
+    BaseResponse<List<ProductResponse>> getAllProductsFromInventory(int page, int size, String isMerchant);
 
     ProductQuantityCheckResponse[] checkStock(List<CartProductRequest> productRequest);
-    ResponseEntity<BaseResponse<String>> updateStock(CartProductRequest cartProductRequest, String authId);
+    ResponseEntity<BaseResponse<String>> updateStock(CartProductRequest cartProductRequest);
 }

@@ -10,7 +10,7 @@ import java.util.List;
 
 public interface PurchaseService {
     BaseResponse<?> deductStock(List<CartProductRequest> productRequest);
-    ResponseEntity<BaseResponse<?>> rateProduct(OrderRatingRequest orderRatingRequest, String authId);
-    ResponseEntity<BaseResponse<?>> getUnratedProduct(String orderId, String authId);
+    ResponseEntity<BaseResponse<?>> rateProduct(OrderRatingRequest orderRatingRequest, String email);
+    ResponseEntity<BaseResponse<?>> getUnratedProduct(String orderId, String email);
 
 }
